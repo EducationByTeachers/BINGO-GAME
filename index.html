@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Bingo Game</title>
+<style>
+  :root { --green:#0b6623; }
+  body {
+    font-family: Arial, sans-serif;
+    text-align:center;
+    background:#f0f0f0;
+    margin:0; padding:20px;
+  }
+  h1 { margin: 10px 0 6px; }
+  p { margin:6px 0 18px; }
+  table { margin:16px auto; border-collapse: collapse; }
+  td {
+    width:96px; height:64px; border:1px solid #999;
+    text-align:center; vertical-align:middle;
+    font-size:20px; cursor:pointer;
+    background:white; transition: background 0.18s, transform 0.12s;
+    user-select:none;
+  }
+  td:hover { transform: translateY(-3px); }
+  td.correct { background:var(--green); color:white; font-weight:700; cursor:default; transform:none; }
+  button { padding:10px 18px; font-size:16px; margin:8px; cursor:pointer; }
+  #called-number { font-size:20px; margin:8px; min-height:28px; }
+  /* Start / Game screens */
+  #start-screen { display:block; }
+  #game-screen { display:none; }
+  /* BIG GOOD JOB message */
+  #message {
+    font-size:120px;
+    color:var(--green);
+    font-weight:800;
+    position:fixed;
+    left:50%; top:48%;
+    transform:translate(-50%,-50%);
+    z-index:10002;
+    display:none;
+    text-shadow: 0 6px 14px rgba(0,0,0,0.15);
+    pointer-events:none;
+    white-space:nowrap;
+  }
+  canvas#confetti {
+    position:fixed; top:0; left:0; width:100%; height:100%;
+    pointer-events:none; z-index:10001; display:none;
+  }
+  /* responsive */
+  @media (max-width:700px){
+    td{ width:64px; height:52px; font-size:16px; }
+    #message{ font-size:56px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- START SCREEN -->
+<div id="start-screen">
+  <h1>BINGO GAME</h1>
+  <p>Listen to the number in Spanish and click the correct digit on the table.</p>
+  <button id="start-btn">Start</button>
+</div>
+
+<!-- GAME SCREEN -->
+<div id="game-screen" aria-hidden="true">
+  <h1>BINGO GAME</h1>
+  <div>
+    <button id="call-btn">Call Number</button>
+    <button id="restart-btn">Restart</button>
+  </div>
+  <div id="called-number"></div>
+  <table id="bingo-table" aria-label="Bingo table"></table>
+</div>
+
+<div id="message">GOOD JOB!</div>
+<canvas id="confetti"></canvas>
+
+<script>
+/* ----------------- configuration ----------------- */
+const numberWords = [
+  "", "Uno","Dos","Tres","Cuatro","Cinco","Seis","Siete","Ocho","Nueve","Diez",
+  "Once","Doce","Trece","Catorce","Quince",
+  "Dieciséis","Diecisiete","Dieciocho","Diecinueve","Veinte",
+  "Veintiuno","Veintidós","Veintitrés","Veinticuatro","Veinticinco","Veintiséis","Veintisiete","Veintiocho","Veintinueve","Treinta",
+  "Treinta y uno","Treinta y dos","Treinta y tres","Treinta y cuatro","Treinta y cinco","Treinta y seis","Treinta y siete","Treinta y ocho","Treinta y nueve",
+  "Cuarenta","Cuarenta y uno","Cuarenta y dos","Cuarenta y tres","Cuarenta y cuatro","Cuarenta y cinco","Cuarenta y seis","Cuarenta y siete","Cuarenta y ocho","Cuarenta y nueve",
+  "Cincuenta"
+];
+/* ----------------- state ----------------- */
+let bingoNumbers = [];
+let calledNumber = 0;
+let correctCount = 0;
+let confettiRunning = false;
+let confettiPieces = [];
+let confettiRAF = null;
+
+/* ----------------- elements ----------------- */
+const startScreen = document.getElementById('start-screen');
+const gameScreen = document.getElementById('game-screen');
+const startBtn = document.getElementById('start-btn');
+const callBtn = document.getElementById('call-btn');
+const restartBtn = document.getElementById('restart-btn');
+const calledNumberDiv = document.getElementById('called-number');
+const table = document.getElementById('bingo-table');
+const messageEl = document.getElementById('message');
+const confettiCanvas = document.getElementById('confetti');
+const ctx = confettiCanvas.getContext('2d');
+
+/* ----------------- event wiring ----------------- */
+startBtn.addEventListener('click', () => {
+  startScreen.style.display = 'none';
+  gameScreen.style.display = 'block';
+  gameScreen.setAttribute('aria-hidden','false');
+  initGame();
+});
+callBtn.addEventListener('click', callNumber);
+restartBtn.addEventListener('click', () => {
+  stopConfetti();
+  speechSynthesis.cancel();
+  initGame();
+});
+
+/* ----------------- game functions ----------------- */
+function initGame(){
+  // create array 1..50 and randomize
+  bingoNumbers = shuffleArray(Array.from({length:50}, (_,i) => i+1));
+  calledNumber = 0;
+  correctCount = 0;
+  calledNumberDiv.textContent = '';
+  messageEl.style.display = 'none';
+  table.innerHTML = '';
+  createTable();
+  stopConfetti(); // ensure no confetti left
+}
+
+function createTable(){
+  // 10 rows x 5 cols = 50 numbers
+  for(let r=0;r<10;r++){
+    const tr = document.createElement('tr');
+    for(let c=0;c<5;c++){
+      const idx = r*5 + c;
+      if(idx >= bingoNumbers.length) break;
+      const num = bingoNumbers[idx];
+      const td = document.createElement('td');
+      td.textContent = num;
+      td.dataset.num = num;
+      td.addEventListener('click', handleCellClick);
+      tr.appendChild(td);
+    }
+    table.appendChild(tr);
+  }
+}
+
+function shuffleArray(arr){
+  for(let i=arr.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function callNumber(){
+  if(correctCount >= 50){
+    return;
+  }
+  // collect remaining (not marked correct) numbers
+  const remaining = Array.from(table.querySelectorAll('td'))
+    .filter(td => !td.classList.contains('correct'))
+    .map(td => parseInt(td.dataset.num));
+  if(remaining.length === 0) return;
+  const choice = remaining[Math.floor(Math.random()*remaining.length)];
+  calledNumber = choice;
+  calledNumberDiv.textContent = "Number announced: " + numberWords[calledNumber];
+  playSound(numberWords[calledNumber]);
+}
+
+function playSound(text){
+  // cancel any ongoing speech then speak new number (Spanish voice)
+  try {
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'es-ES';
+    u.rate = 0.95;
+    u.pitch = 1;
+    speechSynthesis.speak(u);
+  } catch(e) {
+    console.warn('Speech API error:', e);
+  }
+}
+
+function handleCellClick(e){
+  const td = e.currentTarget;
+  if(!calledNumber){
+    alert('Press "Call Number" first.');
+    return;
+  }
+  const value = parseInt(td.dataset.num);
+  if(value === calledNumber){
+    td.classList.add('correct');
+    td.style.pointerEvents = 'none';
+    correctCount++;
+    // reset calledNumber so user must call again
+    calledNumber = 0;
+    calledNumberDiv.textContent = '';
+    if(correctCount >= 50){
+      finishGame();
+    }
+  } else {
+    // incorrect feedback in English
+    // small visual flash:
+    td.animate([
+      { transform: 'translateX(0)' },
+      { transform: 'translateX(-6px)' },
+      { transform: 'translateX(6px)' },
+      { transform: 'translateX(0)' }
+    ], { duration: 240, iterations: 1 });
+    alert('Incorrect — try again.');
+  }
+}
+
+/* ----------------- finish & confetti ----------------- */
+function finishGame(){
+  messageEl.style.display = 'block';
+  startConfetti();
+}
+
+function startConfetti(){
+  if(confettiRunning) return;
+  confettiRunning = true;
+  confettiCanvas.style.display = 'block';
+  resizeCanvas();
+  confettiPieces = Array.from({length: 200}, () => ({
+    x: Math.random()*confettiCanvas.width,
+    y: Math.random()*confettiCanvas.height - confettiCanvas.height,
+    size: 6 + Math.random()*6,
+    vx: -1 + Math.random()*2,
+    vy: 2 + Math.random()*3,
+    rot: Math.random()*360,
+    rotSpeed: -5 + Math.random()*10,
+    color: ["#ef4444","#22c55e","#3b82f6","#facc15","#a855f7"][Math.floor(Math.random()*5)]
+  }));
+  // draw loop
+  function draw(){
+    ctx.clearRect(0,0,confettiCanvas.width, confettiCanvas.height);
+    confettiPieces.forEach(p => {
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rot * Math.PI/180);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(-p.size/2, -p.size/2, p.size, p.size*0.6);
+      ctx.restore();
+      p.x += p.vx;
+      p.y += p.vy;
+      p.rot += p.rotSpeed;
+      // recycle
+      if(p.y > confettiCanvas.height + 20){
+        p.y = -20;
+        p.x = Math.random() * confettiCanvas.width;
+      }
+      if(p.x > confettiCanvas.width + 20) p.x = -20;
+      if(p.x < -20) p.x = confettiCanvas.width + 20;
+    });
+    if(confettiRunning) confettiRAF = requestAnimationFrame(draw);
+  }
+  draw();
+}
+
+function stopConfetti(){
+  confettiRunning = false;
+  if(confettiRAF) cancelAnimationFrame(confettiRAF);
+  confettiRAF = null;
+  confettiPieces = [];
+  ctx && ctx.clearRect(0,0,confettiCanvas.width || 0, confettiCanvas.height || 0);
+  confettiCanvas.style.display = 'none';
+  messageEl.style.display = 'none';
+}
+
+function resizeCanvas(){
+  confettiCanvas.width = window.innerWidth;
+  confettiCanvas.height = window.innerHeight;
+}
+
+/* resize handler to keep canvas size correct */
+window.addEventListener('resize', () => {
+  if(confettiRunning) resizeCanvas();
+});
+
+/* ----------------- init default ----------------- */
+// show start screen by default (already visible via CSS). Do a light sanity init.
+document.addEventListener('DOMContentLoaded', () => {
+  // nothing to do until Start pressed
+});
+</script>
+
+</body>
+</html>
