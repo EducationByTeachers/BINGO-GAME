@@ -1,297 +1,213 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<title>Bingo Game</title>
-<style>
-  :root { --green:#0b6623; }
-  body {
-    font-family: Arial, sans-serif;
-    text-align:center;
-    background:#f0f0f0;
-    margin:0; padding:20px;
-  }
-  h1 { margin: 10px 0 6px; }
-  p { margin:6px 0 18px; }
-  table { margin:16px auto; border-collapse: collapse; }
-  td {
-    width:96px; height:64px; border:1px solid #999;
-    text-align:center; vertical-align:middle;
-    font-size:20px; cursor:pointer;
-    background:white; transition: background 0.18s, transform 0.12s;
-    user-select:none;
-  }
-  td:hover { transform: translateY(-3px); }
-  td.correct { background:var(--green); color:white; font-weight:700; cursor:default; transform:none; }
-  button { padding:10px 18px; font-size:16px; margin:8px; cursor:pointer; }
-  #called-number { font-size:20px; margin:8px; min-height:28px; }
-  /* Start / Game screens */
-  #start-screen { display:block; }
-  #game-screen { display:none; }
-  /* BIG GOOD JOB message */
-  #message {
-    font-size:120px;
-    color:var(--green);
-    font-weight:800;
-    position:fixed;
-    left:50%; top:48%;
-    transform:translate(-50%,-50%);
-    z-index:10002;
-    display:none;
-    text-shadow: 0 6px 14px rgba(0,0,0,0.15);
-    pointer-events:none;
-    white-space:nowrap;
-  }
-  canvas#confetti {
-    position:fixed; top:0; left:0; width:100%; height:100%;
-    pointer-events:none; z-index:10001; display:none;
-  }
-  /* responsive */
-  @media (max-width:700px){
-    td{ width:64px; height:52px; font-size:16px; }
-    #message{ font-size:56px; }
-  }
-</style>
+  <meta charset="UTF-8" />
+  <title>BINGO GAME</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    :root{
+      --blue:#007bff; --blue-hover:#0056b3; --good:#22c55e; --error:#ef4444;
+      --yellow:#ffd500; --text:#111827; --bg:#f8f8f8;
+    }
+    *{box-sizing:border-box}
+    body{
+      font-family: Arial, sans-serif;
+      text-align:center;
+      background:var(--bg);
+      margin:0; padding:20px;
+      color:var(--text);
+    }
+    .hidden{display:none}
+    h1{font-size:2.5rem;margin:0 0 10px}
+    p{font-size:1.05rem; margin:8px 0}
+    button{
+      padding:10px 20px; font-size:1.1rem; background:var(--blue); color:#fff;
+      border:none; border-radius:10px; cursor:pointer; margin:12px 6px; transition:transform .05s ease;
+    }
+    button:hover{background:var(--blue-hover)}
+    button:active{transform:scale(0.98)}
+    /* Video */
+    iframe{
+      margin-top:16px; width:800; height:200px; max-width:95%;
+      border:0; background:#000;
+    }
+    /* Grid 10x5 */
+    #grid{
+      display:grid; grid-template-columns:repeat(10, 60px); gap:8px;
+      justify-content:center; margin:18px auto 8px;
+    }
+    .cell{
+      width:60px; height:60px; background:var(--yellow); color:#000; font-weight:700;
+      display:flex; align-items:center; justify-content:center; border-radius:8px; cursor:pointer;
+      user-select:none; font-size:1.15rem; box-shadow:0 1px 0 rgba(0,0,0,.15) inset;
+      transition:transform .05s ease, box-shadow .2s ease;
+    }
+    .cell:active{transform:scale(0.98)}
+    .correct{
+      background:var(--good)!important; color:#fff; pointer-events:none;
+      box-shadow:none;
+    }
+    #bingo-message{
+      font-size:3rem; color:var(--good); margin-top:16px; font-weight:800;
+    }
+    /* Text message (SR-friendly) */
+    #message{
+      font-size:1.2rem; color:var(--error); margin:10px 0; min-height:1.4em;
+    }
+    /* Toast de error visible */
+    #error-toast{
+      position:fixed; top:20px; left:50%; transform:translateX(-50%);
+      background:var(--error); color:#fff; padding:12px 18px; border-radius:12px;
+      box-shadow:0 10px 25px rgba(0,0,0,.15); display:none; z-index:9999; font-weight:700;
+    }
+    /* Shake en celda equivocada */
+    @keyframes shake {
+      0%{transform:translateX(0)}
+      20%{transform:translateX(-6px)}
+      40%{transform:translateX(6px)}
+      60%{transform:translateX(-4px)}
+      80%{transform:translateX(4px)}
+      100%{transform:translateX(0)}
+    }
+    .shake{animation:shake .35s linear}
+  </style>
 </head>
 <body>
 
-<!-- START SCREEN -->
-<div id="start-screen">
-  <h1>BINGO GAME</h1>
-  <p>Listen to the number in Spanish and click the correct digit on the table.</p>
-  <button id="start-btn">Start</button>
-</div>
+  <!-- Toast de error -->
+  <div id="error-toast" role="alert" aria-live="assertive"></div>
 
-<!-- GAME SCREEN -->
-<div id="game-screen" aria-hidden="true">
-  <h1>BINGO GAME</h1>
-  <div>
-    <button id="call-btn">Call Number</button>
-    <button id="restart-btn">Restart</button>
+  <!-- Pantalla inicial -->
+  <div id="start-screen">
+    <h1>BINGO GAME</h1>
+    <p>Click the numbers in the correct order to complete the BINGO challenge!Stop the video while you search for the number</p>
+    <button id="startBtn">Start</button>
   </div>
-  <div id="called-number"></div>
-  <table id="bingo-table" aria-label="Bingo table"></table>
-</div>
 
-<div id="message">GOOD JOB!</div>
-<canvas id="confetti"></canvas>
+  <!-- Pantalla de juego -->
+  <div id="game-screen" class="hidden">
+    <h1>BINGO GAME</h1>
+    <iframe id="game-video" src="" allowfullscreen></iframe>
 
-<script>
-/* ----------------- configuration ----------------- */
-const numberWords = [
-  "", "Uno","Dos","Tres","Cuatro","Cinco","Seis","Siete","Ocho","Nueve","Diez",
-  "Once","Doce","Trece","Catorce","Quince",
-  "Dieciséis","Diecisiete","Dieciocho","Diecinueve","Veinte",
-  "Veintiuno","Veintidós","Veintitrés","Veinticuatro","Veinticinco","Veintiséis","Veintisiete","Veintiocho","Veintinueve","Treinta",
-  "Treinta y uno","Treinta y dos","Treinta y tres","Treinta y cuatro","Treinta y cinco","Treinta y seis","Treinta y siete","Treinta y ocho","Treinta y nueve",
-  "Cuarenta","Cuarenta y uno","Cuarenta y dos","Cuarenta y tres","Cuarenta y cuatro","Cuarenta y cinco","Cuarenta y seis","Cuarenta y siete","Cuarenta y ocho","Cuarenta y nueve",
-  "Cincuenta"
-];
-/* ----------------- state ----------------- */
-let bingoNumbers = [];
-let calledNumber = 0;
-let correctCount = 0;
-let confettiRunning = false;
-let confettiPieces = [];
-let confettiRAF = null;
+    <div id="grid" aria-label="Bingo numbers grid"></div>
 
-/* ----------------- elements ----------------- */
-const startScreen = document.getElementById('start-screen');
-const gameScreen = document.getElementById('game-screen');
-const startBtn = document.getElementById('start-btn');
-const callBtn = document.getElementById('call-btn');
-const restartBtn = document.getElementById('restart-btn');
-const calledNumberDiv = document.getElementById('called-number');
-const table = document.getElementById('bingo-table');
-const messageEl = document.getElementById('message');
-const confettiCanvas = document.getElementById('confetti');
-const ctx = confettiCanvas.getContext('2d');
+    <!-- Mensaje accesible (se borra al acertar) -->
+    <p id="message" aria-live="polite"></p>
 
-/* ----------------- event wiring ----------------- */
-startBtn.addEventListener('click', () => {
-  startScreen.style.display = 'none';
-  gameScreen.style.display = 'block';
-  gameScreen.setAttribute('aria-hidden','false');
-  initGame();
-});
-callBtn.addEventListener('click', callNumber);
-restartBtn.addEventListener('click', () => {
-  stopConfetti();
-  speechSynthesis.cancel();
-  initGame();
-});
+    <div id="bingo-message"></div>
+    <button id="restartBtn">Restart</button>
+  </div>
 
-/* ----------------- game functions ----------------- */
-function initGame(){
-  // create array 1..50 and randomize
-  bingoNumbers = shuffleArray(Array.from({length:50}, (_,i) => i+1));
-  calledNumber = 0;
-  correctCount = 0;
-  calledNumberDiv.textContent = '';
-  messageEl.style.display = 'none';
-  table.innerHTML = '';
-  createTable();
-  stopConfetti(); // ensure no confetti left
-}
+  <!-- Confeti -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
 
-function createTable(){
-  // 10 rows x 5 cols = 50 numbers
-  for(let r=0;r<10;r++){
-    const tr = document.createElement('tr');
-    for(let c=0;c<5;c++){
-      const idx = r*5 + c;
-      if(idx >= bingoNumbers.length) break;
-      const num = bingoNumbers[idx];
-      const td = document.createElement('td');
-      td.textContent = num;
-      td.dataset.num = num;
-      td.addEventListener('click', handleCellClick);
-      tr.appendChild(td);
+  <script>
+    // Orden estricto (incluye 6 dos veces, como pediste)
+    const correctOrder = [49,18,3,46,12,34,22,9,27,1,38,15,50,4,29,41,6,33,11,20,47,19,36,8,45,23,5,39,14,30,2,44,17,35,25,10,48,32,7,43,21,26,13,37,42,28,31,16,24,40];
+
+    let currentIndex = 0;
+    let confettiInterval = null;
+
+    const startScreen = document.getElementById('start-screen');
+    const gameScreen  = document.getElementById('game-screen');
+    const grid        = document.getElementById('grid');
+    const msg         = document.getElementById('message');
+    const bingoMsg    = document.getElementById('bingo-message');
+    const toast       = document.getElementById('error-toast');
+    const video       = document.getElementById('game-video');
+
+    document.getElementById('startBtn').addEventListener('click', startGame);
+    document.getElementById('restartBtn').addEventListener('click', restartGame);
+
+    function startGame(){
+      startScreen.classList.add('hidden');
+      gameScreen.classList.remove('hidden');
+      video.src = "https://player.vimeo.com/video/1114880422";
+ // Reemplaza con tu enlace (Vimeo/YouTube/etc.)
+      buildGrid();
     }
-    table.appendChild(tr);
-  }
-}
 
-function shuffleArray(arr){
-  for(let i=arr.length-1;i>0;i--){
-    const j = Math.floor(Math.random()*(i+1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  return arr;
-}
-
-function callNumber(){
-  if(correctCount >= 50){
-    return;
-  }
-  // collect remaining (not marked correct) numbers
-  const remaining = Array.from(table.querySelectorAll('td'))
-    .filter(td => !td.classList.contains('correct'))
-    .map(td => parseInt(td.dataset.num));
-  if(remaining.length === 0) return;
-  const choice = remaining[Math.floor(Math.random()*remaining.length)];
-  calledNumber = choice;
-  calledNumberDiv.textContent = "Number announced: " + numberWords[calledNumber];
-  playSound(numberWords[calledNumber]);
-}
-
-function playSound(text){
-  // cancel any ongoing speech then speak new number (Spanish voice)
-  try {
-    speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = 'es-ES';
-    u.rate = 0.95;
-    u.pitch = 1;
-    speechSynthesis.speak(u);
-  } catch(e) {
-    console.warn('Speech API error:', e);
-  }
-}
-
-function handleCellClick(e){
-  const td = e.currentTarget;
-  if(!calledNumber){
-    alert('Press "Call Number" first.');
-    return;
-  }
-  const value = parseInt(td.dataset.num);
-  if(value === calledNumber){
-    td.classList.add('correct');
-    td.style.pointerEvents = 'none';
-    correctCount++;
-    // reset calledNumber so user must call again
-    calledNumber = 0;
-    calledNumberDiv.textContent = '';
-    if(correctCount >= 50){
-      finishGame();
-    }
-  } else {
-    // incorrect feedback in English
-    // small visual flash:
-    td.animate([
-      { transform: 'translateX(0)' },
-      { transform: 'translateX(-6px)' },
-      { transform: 'translateX(6px)' },
-      { transform: 'translateX(0)' }
-    ], { duration: 240, iterations: 1 });
-    alert('Incorrect — try again.');
-  }
-}
-
-/* ----------------- finish & confetti ----------------- */
-function finishGame(){
-  messageEl.style.display = 'block';
-  startConfetti();
-}
-
-function startConfetti(){
-  if(confettiRunning) return;
-  confettiRunning = true;
-  confettiCanvas.style.display = 'block';
-  resizeCanvas();
-  confettiPieces = Array.from({length: 200}, () => ({
-    x: Math.random()*confettiCanvas.width,
-    y: Math.random()*confettiCanvas.height - confettiCanvas.height,
-    size: 6 + Math.random()*6,
-    vx: -1 + Math.random()*2,
-    vy: 2 + Math.random()*3,
-    rot: Math.random()*360,
-    rotSpeed: -5 + Math.random()*10,
-    color: ["#ef4444","#22c55e","#3b82f6","#facc15","#a855f7"][Math.floor(Math.random()*5)]
-  }));
-  // draw loop
-  function draw(){
-    ctx.clearRect(0,0,confettiCanvas.width, confettiCanvas.height);
-    confettiPieces.forEach(p => {
-      ctx.save();
-      ctx.translate(p.x, p.y);
-      ctx.rotate(p.rot * Math.PI/180);
-      ctx.fillStyle = p.color;
-      ctx.fillRect(-p.size/2, -p.size/2, p.size, p.size*0.6);
-      ctx.restore();
-      p.x += p.vx;
-      p.y += p.vy;
-      p.rot += p.rotSpeed;
-      // recycle
-      if(p.y > confettiCanvas.height + 20){
-        p.y = -20;
-        p.x = Math.random() * confettiCanvas.width;
+    function buildGrid(){
+      grid.innerHTML = '';
+      for(let i=1;i<=50;i++){
+        const cell = document.createElement('button');
+        cell.type = "button";
+        cell.className = 'cell';
+        cell.textContent = i;
+        cell.setAttribute('aria-label', `Number ${i}`);
+        cell.addEventListener('click', ()=> onCellClick(cell, i));
+        grid.appendChild(cell);
       }
-      if(p.x > confettiCanvas.width + 20) p.x = -20;
-      if(p.x < -20) p.x = confettiCanvas.width + 20;
-    });
-    if(confettiRunning) confettiRAF = requestAnimationFrame(draw);
-  }
-  draw();
-}
+    }
 
-function stopConfetti(){
-  confettiRunning = false;
-  if(confettiRAF) cancelAnimationFrame(confettiRAF);
-  confettiRAF = null;
-  confettiPieces = [];
-  ctx && ctx.clearRect(0,0,confettiCanvas.width || 0, confettiCanvas.height || 0);
-  confettiCanvas.style.display = 'none';
-  messageEl.style.display = 'none';
-}
+    function onCellClick(cell, number){
+      // Si ya completó el juego, ignorar clics
+      if(currentIndex >= correctOrder.length) return;
 
-function resizeCanvas(){
-  confettiCanvas.width = window.innerWidth;
-  confettiCanvas.height = window.innerHeight;
-}
+      const expected = correctOrder[currentIndex];
 
-/* resize handler to keep canvas size correct */
-window.addEventListener('resize', () => {
-  if(confettiRunning) resizeCanvas();
-});
+      if(number === expected){
+        markCorrect(cell);
+        currentIndex++;
+        msg.textContent = '';
+        if(currentIndex === correctOrder.length){
+          finishGame();
+        }
+      }else{
+        showError("ERROR! Try again.");
+        blinkWrong(cell);
+      }
+    }
 
-/* ----------------- init default ----------------- */
-// show start screen by default (already visible via CSS). Do a light sanity init.
-document.addEventListener('DOMContentLoaded', () => {
-  // nothing to do until Start pressed
-});
-</script>
+    function markCorrect(cell){
+      cell.classList.add('correct');
+      cell.setAttribute('aria-pressed', 'true');
+      // Deshabilitar el botón para evitar recliques accidentales
+      cell.disabled = true;
+    }
 
+    function blinkWrong(cell){
+      cell.classList.add('shake');
+      setTimeout(()=> cell.classList.remove('shake'), 400);
+    }
+
+    function showError(text){
+      // Texto accesible bajo la grilla
+      msg.textContent = text;
+      // Toast visible
+      toast.textContent = text;
+      toast.style.display = 'block';
+      clearTimeout(showError._t);
+      showError._t = setTimeout(()=> { toast.style.display = 'none'; }, 1200);
+    }
+
+    function finishGame(){
+      bingoMsg.textContent = 'BINGO! GOOD JOB!';
+      startConfetti();
+    }
+
+    function startConfetti(){
+      stopConfetti();
+      confettiInterval = setInterval(()=>{
+        confetti({ particleCount: 120, spread: 70, origin: { y: 0.6 } });
+      }, 450);
+    }
+
+    function stopConfetti(){
+      if(confettiInterval){
+        clearInterval(confettiInterval);
+        confettiInterval = null;
+      }
+    }
+
+    function restartGame(){
+      stopConfetti();
+      currentIndex = 0;
+      msg.textContent = '';
+      bingoMsg.textContent = '';
+      buildGrid();
+      // Mantiene el mismo video ya cargado
+    }
+  </script>
 </body>
 </html>
